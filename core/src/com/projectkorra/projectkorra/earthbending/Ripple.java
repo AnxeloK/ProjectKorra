@@ -23,8 +23,10 @@ import com.projectkorra.projectkorra.util.DamageHandler;
 
 public class Ripple extends EarthAbility {
 
+	private static final int[] HEIGHT_OFFSETS = new int[] { 1, 2, 3, 0, -1 };
+	private static final Map<Long, Integer[]> BLOCK_KEYS = new ConcurrentHashMap<Long, Integer[]>();
 	private static final Map<Integer[], Block> BLOCKS = new ConcurrentHashMap<Integer[], Block>();
-
+	private static final Map<Block, Boolean> MOVED_BLOCKS = new ConcurrentHashMap<Block, Boolean>();
 	private int step;
 	private int maxStep;
 	@Attribute(Attribute.RANGE)
@@ -85,7 +87,7 @@ public class Ripple extends EarthAbility {
 			location = location.clone().add(direction);
 		}
 
-		for (final int i : new int[] { 1, 2, 3, 0, -1 }) {
+		for (final int i : HEIGHT_OFFSETS) {
 			Location loc;
 			loc = location.clone().add(0, i, 0);
 			final Block topBlock = loc.getBlock();
@@ -206,9 +208,10 @@ public class Ripple extends EarthAbility {
 		Location location = this.origin.clone();
 		this.locations.add(location);
 
-		while (location.distanceSquared(this.origin) < this.range * this.range) {
+		final double maxDistanceSquared = this.range * this.range;
+		while (location.distanceSquared(this.origin) < maxDistanceSquared) {
 			location = location.clone().add(this.direction);
-			for (final int i : new int[] { 1, 2, 3, 0, -1 }) {
+			for (final int i : HEIGHT_OFFSETS) {
 				Location loc;
 				loc = location.clone().add(0, i, 0);
 				final Block topblock = loc.getBlock();
@@ -228,11 +231,8 @@ public class Ripple extends EarthAbility {
 	private boolean decrease(Block block) {
 		if (block == null) {
 			return false;
-		} else if (hasAnyMoved(block)) {
-			return false;
 		}
 
-		setMoved(block);
 		final Block botBlock = block.getRelative(BlockFace.DOWN);
 		int length = 1;
 
@@ -240,17 +240,18 @@ public class Ripple extends EarthAbility {
 			length = 2;
 			block = botBlock;
 		}
-		return this.moveEarth(block, new Vector(0, -1, 0), length, false);
+		if (this.moveEarth(block, new Vector(0, -1, 0), length, false)) {
+			setMoved(block);
+			return true;
+		}
+		return false;
 	}
 
 	private boolean increase(final Block block) {
 		if (block == null) {
 			return false;
-		} else if (hasAnyMoved(block)) {
-			return false;
 		}
 
-		setMoved(block);
 		final Block botblock = block.getRelative(BlockFace.DOWN);
 		int length = 1;
 
@@ -258,6 +259,7 @@ public class Ripple extends EarthAbility {
 			length = 2;
 		}
 		if (this.moveEarth(block, new Vector(0, 1, 0), length, false)) {
+			setMoved(block);
 			for (final Entity entity : GeneralMethods.getEntitiesAroundPoint(block.getLocation().clone().add(0, 1, 0), 2)) {
 				if (entity.getEntityId() != this.player.getEntityId() && !this.entities.contains(entity)) {
 					if (!(entity instanceof FallingBlock)) {
@@ -286,24 +288,26 @@ public class Ripple extends EarthAbility {
 	}
 
 	private static void setMoved(final Block block) {
-		final int x = block.getX();
-		final int z = block.getZ();
-		final Integer[] pair = new Integer[] { x, z };
-		BLOCKS.put(pair, block);
+		BLOCKS.put(getKey(block), block);
+		MOVED_BLOCKS.put(block, Boolean.TRUE);
 	}
 
 	private static boolean hasAnyMoved(final Block block) {
-		final int x = block.getX();
-		final int z = block.getZ();
-		final Integer[] pair = new Integer[] { x, z };
-		if (BLOCKS.containsKey(pair)) {
-			return true;
-		}
-		return false;
+		return block != null && MOVED_BLOCKS.containsKey(block);
+	}
+
+	private static Integer[] getKey(final Block block) {
+		return BLOCK_KEYS.computeIfAbsent(columnKey(block), key -> new Integer[] { block.getX(), block.getZ() });
+	}
+
+	private static long columnKey(final Block block) {
+		return (((long) block.getX()) << 32) ^ (block.getZ() & 0xffffffffL);
 	}
 
 	public static void progressAllCleanup() {
 		BLOCKS.clear();
+		BLOCK_KEYS.clear();
+		MOVED_BLOCKS.clear();
 	}
 
 	public static Map<Integer[], Block> getBlocks() {
