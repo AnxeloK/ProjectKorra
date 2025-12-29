@@ -24,9 +24,7 @@ import com.projectkorra.projectkorra.util.DamageHandler;
 public class Ripple extends EarthAbility {
 
 	private static final int[] HEIGHT_OFFSETS = new int[] { 1, 2, 3, 0, -1 };
-	private static final Map<Long, Integer[]> BLOCK_KEYS = new ConcurrentHashMap<Long, Integer[]>();
-	private static final Map<Integer[], Block> BLOCKS = new ConcurrentHashMap<Integer[], Block>();
-	private static final Map<Block, Boolean> MOVED_BLOCKS = new ConcurrentHashMap<Block, Boolean>();
+	private static final Map<Long, Block> BLOCKS = new ConcurrentHashMap<Long, Block>();
 	private int step;
 	private int maxStep;
 	@Attribute(Attribute.RANGE)
@@ -116,25 +114,11 @@ public class Ripple extends EarthAbility {
 				this.block3 = this.block4;
 				this.block4 = newlocation.getBlock();
 
-				if (this.block1 != null) {
-					if (hasAnyMoved(this.block1)) {
-						this.block1 = null;
-					}
+				if (this.block3 != null && hasAnyMoved(this.block3)) {
+					this.block3 = null;
 				}
-				if (this.block2 != null) {
-					if (hasAnyMoved(this.block2)) {
-						this.block2 = null;
-					}
-				}
-				if (this.block3 != null) {
-					if (hasAnyMoved(this.block3)) {
-						this.block3 = null;
-					}
-				}
-				if (this.block4 != null) {
-					if (hasAnyMoved(this.block4)) {
-						this.block4 = null;
-					}
+				if (this.block4 != null && hasAnyMoved(this.block4)) {
+					this.block4 = null;
 				}
 
 				if (this.step == 0) {
@@ -287,30 +271,27 @@ public class Ripple extends EarthAbility {
 		AirAbility.breakBreathbendingHold(entity);
 	}
 
+	/** Marks the column for this block as moved. */
 	private static void setMoved(final Block block) {
-		BLOCKS.put(getKey(block), block);
-		MOVED_BLOCKS.put(block, Boolean.TRUE);
+		BLOCKS.put(columnKey(block), block);
 	}
 
+	/** Checks if the column for this block already moved. */
 	private static boolean hasAnyMoved(final Block block) {
-		return block != null && MOVED_BLOCKS.containsKey(block);
+		return block != null && BLOCKS.containsKey(columnKey(block));
 	}
 
-	private static Integer[] getKey(final Block block) {
-		return BLOCK_KEYS.computeIfAbsent(columnKey(block), key -> new Integer[] { block.getX(), block.getZ() });
-	}
-
+	/** Packs an x/z column into a stable long key. */
 	private static long columnKey(final Block block) {
 		return (((long) block.getX()) << 32) ^ (block.getZ() & 0xffffffffL);
 	}
 
 	public static void progressAllCleanup() {
 		BLOCKS.clear();
-		BLOCK_KEYS.clear();
-		MOVED_BLOCKS.clear();
 	}
 
-	public static Map<Integer[], Block> getBlocks() {
+	/** Returns the moved columns, keyed by packed x/z. */
+	public static Map<Long, Block> getBlocks() {
 		return BLOCKS;
 	}
 
